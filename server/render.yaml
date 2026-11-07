@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: awaazsetu-api
+    env: node
+    region: singapore
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5001
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRE
+        value: 24h
+      - key: PRISMA_API_ENDPOINT
+        value: https://api.vachana.ai/stt/v3
+      - key: PRISMA_API_KEY_ID
+        sync: false
+      - key: EVON_INFERENCE_ENDPOINT
+        sync: false
+      - key: TIMBRE_API_ENDPOINT
+        value: https://api.vachana.ai/api/v1/tts/inference
+      - key: TIMBRE_API_KEY_ID
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: MAX_FILE_SIZE
+        value: "10485760"
+      - key: UPLOAD_DIR
+        value: ./uploads
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "900000"
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: "100"
