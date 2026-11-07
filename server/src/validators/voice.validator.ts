@@ -3,12 +3,15 @@ import { SUPPORTED_LANGUAGES } from '../config/constants';
 
 export const speakSchema = z.object({
   body: z.object({
-    text: z.string().min(1).max(500),
+    text: z.string().min(1).max(500).optional(),
     language: z.enum(SUPPORTED_LANGUAGES).optional(),
     voice: z.string().optional(),
     incidentId: z.string().optional(),
     category: z.string().optional(),
-  }),
+  }).refine(
+    (data) => data.text || (data.incidentId && data.category),
+    { message: 'Either text or incidentId+category is required' }
+  ),
 });
 
 export const analyzeSchema = z.object({

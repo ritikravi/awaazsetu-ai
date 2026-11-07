@@ -142,15 +142,18 @@ function runRuleBasedExtraction(transcript: string, language: string): IncidentE
     }
   }
 
-  const matched = bestMatch ?? CATEGORY_RULES[0]; // default to Water Leakage
+  const matched = bestMatch ?? { ...CATEGORY_RULES[7], category: 'Other' as IncidentCategory }; // default Other
 
-  // Build description from transcript (first 200 chars, cleaned up)
-  const description =
-    transcript.length > 200
-      ? transcript.substring(0, 197) + '...'
-      : transcript.length < 15
-      ? `${matched.category} reported by user`
-      : transcript;
+  // Build a clean description — limit to 200 chars, trim to sentence boundary
+  let description = transcript.trim();
+  if (description.length > 200) {
+    // Try to cut at a natural boundary
+    const cutAt = description.lastIndexOf(' ', 200);
+    description = description.substring(0, cutAt > 100 ? cutAt : 200) + '...';
+  }
+  if (description.length < 15) {
+    description = `${matched.category} incident reported`;
+  }
 
   const location = extractLocationFromText(transcript);
   const missing = extractMissingInfo(transcript, matched.category);

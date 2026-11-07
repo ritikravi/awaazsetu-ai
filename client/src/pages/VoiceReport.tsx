@@ -103,15 +103,15 @@ export default function VoiceReport() {
       // Generate Timbre confirmation
       try {
         const audioRes = await api.post('/voice/speak', {
-          text: `placeholder`,
           incidentId: incident.incidentId,
           category: incident.category,
-          language,
+          language: incident.language || language,
         }, { responseType: 'arraybuffer' });
         const blob = new Blob([audioRes.data], { type: 'audio/mpeg' });
         setConfirmationAudioUrl(URL.createObjectURL(blob));
-      } catch {
-        // Timbre optional — continue without audio
+      } catch (ttsErr: any) {
+        // Log but don't block — incident already saved
+        console.warn('TTS confirmation failed:', ttsErr?.response?.data || ttsErr?.message);
       }
 
       setStep('confirmed');
