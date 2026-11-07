@@ -1,11 +1,10 @@
 import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
-import path from 'path';
-import ffmpeg from 'fluent-ffmpeg';
 import { config } from '../../config/env';
 import { GNANI_CONFIG } from '../../config/constants';
 import { logger } from '../../utils/logger';
+import { convertToWav } from '../../utils/audioConvert';
 import { ServiceUnavailableError, TimeoutError } from '../../utils/errorTypes';
 
 export interface PrismaTranscriptionResult {
@@ -13,22 +12,6 @@ export interface PrismaTranscriptionResult {
   language: string;
   processingTimeMs: number;
   requestId?: string;
-}
-
-/** Convert any browser audio (webm/ogg/etc.) to 16kHz mono WAV using ffmpeg, max 28 seconds */
-function convertToWav(inputPath: string): Promise<string> {
-  const outputPath = inputPath.replace(/\.[^.]+$/, '_converted.wav');
-  return new Promise((resolve, reject) => {
-    ffmpeg(inputPath)
-      .audioFrequency(16000)
-      .audioChannels(1)
-      .audioCodec('pcm_s16le')
-      .format('wav')
-      .duration(28) // Trim to 28s — Prisma limit is 30s
-      .on('end', () => resolve(outputPath))
-      .on('error', (err) => reject(new Error(`ffmpeg conversion failed: ${err.message}`)))
-      .save(outputPath);
-  });
 }
 
 class PrismaService {
@@ -57,14 +40,10 @@ class PrismaService {
     let convertedPath: string | null = null;
 
     try {
-      // Convert browser audio to 16kHz mono WAV for reliable Prisma compatibility
-      logger.info('Converting audio to WAV for Prisma', { inputMime: mimeType, filePath });
+      logger.info('Converting audio to WAV for Prisma', { inputMime: mimeType });
       convertedPath = await convertToWav(filePath);
-      logger.info('Audio converted to WAV', { convertedPath });
 
       const formData = new FormData();
-
-      // Field names per Gnani API docs
       formData.append('audio_file', fs.createReadStream(convertedPath), {
         filename: 'recording.wav',
         contentType: 'audio/wav',
@@ -85,45 +64,24 @@ class PrismaService {
 
       const processingTimeMs = Date.now() - startTime;
       const data = response.data;
-
-      logger.info('Prisma raw response', { data });
-
       const transcript: string = data.transcript ?? '';
       const detectedLanguage: string = data.detected_language_code ?? language;
       const requestId: string | undefined = data.request_id;
 
-      logger.info('Prisma STT success', {
-        processingTimeMs,
-        transcriptLength: transcript.length,
-        requestId,
-        detectedLanguage,
-      });
-
+      logger.info('Prisma STT success', { processingTimeMs, transcriptLength: transcript.length });
       return { transcript, language: detectedLanguage, processingTimeMs, requestId };
     } catch (error: any) {
       const processingTimeMs = Date.now() - startTime;
-      logger.error('Prisma STT failed', {
-        error: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-        processingTimeMs,
-      });
-
       if (axios.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED') throw new TimeoutError('Prisma STT timed out');
         if (error.response) {
-          const status = error.response.status;
-          const detail =
-            error.response.data?.error?.message ??
-            error.response.data?.detail ??
-            error.response.data?.message ??
-            'Unknown error';
-          throw new ServiceUnavailableError(`Prisma API error ${status}: ${JSON.stringify(detail)}`);
+          const detail = error.response.data?.error?.message ?? error.response.data?.detail ?? 'Unknown error';
+          throw new ServiceUnavailableError(`Prisma API error ${error.response.status}: ${JSON.stringify(detail)}`);
         }
       }
+      logger.error('Prisma STT failed', { error: error.message, processingTimeMs });
       throw new ServiceUnavailableError(`Transcription failed: ${error.message}`);
     } finally {
-      // Clean up the converted WAV file
       if (convertedPath && fs.existsSync(convertedPath)) {
         fs.unlink(convertedPath, () => {});
       }
