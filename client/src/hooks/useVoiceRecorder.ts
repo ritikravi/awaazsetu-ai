@@ -45,7 +45,20 @@ export function useVoiceRecorder() {
       setDuration(0);
 
       timerRef.current = window.setInterval(() => {
-        setDuration((d) => d + 1);
+        setDuration((d) => {
+          const next = d + 1;
+          // Auto-stop at 28s to stay under Prisma's 30s limit
+          if (next >= 28) {
+            if (mediaRecorderRef.current?.state === 'recording') {
+              mediaRecorderRef.current.stop();
+            }
+            if (timerRef.current) {
+              clearInterval(timerRef.current);
+              timerRef.current = null;
+            }
+          }
+          return next;
+        });
       }, 1000);
     } catch (err: any) {
       setError(err.message ?? 'Microphone access denied');

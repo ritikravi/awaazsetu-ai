@@ -223,8 +223,16 @@ export default function VoiceReport() {
 
               {recorder.state === 'recording' && (
                 <div className="text-center">
-                  <div className="text-red-400 text-2xl font-mono font-bold">{recorder.formattedDuration}</div>
-                  <div className="text-gray-500 text-sm mt-1">Recording — tap to stop</div>
+                  <div className="text-red-400 text-2xl font-mono font-bold">
+                    {recorder.formattedDuration}
+                  </div>
+                  {recorder.duration >= 25 ? (
+                    <div className="text-yellow-400 text-xs mt-1 animate-pulse">
+                      ⚠️ Stop soon — 30s maximum
+                    </div>
+                  ) : (
+                    <div className="text-gray-500 text-sm mt-1">Recording — tap to stop</div>
+                  )}
                 </div>
               )}
 

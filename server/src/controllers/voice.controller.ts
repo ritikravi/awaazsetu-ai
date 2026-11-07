@@ -17,20 +17,19 @@ export class VoiceController {
         throw new ValidationError('Audio file is required');
       }
 
-      const language = req.body.language as string | undefined;
+      const language = (req.body.language as string) || 'hi-IN';
       const mimeType = req.file.mimetype;
 
       const result = await prismaService.transcribe(filePath, mimeType, language);
 
-      // Log AI operation
       await AIProcessingLog.create({
         provider: 'prisma',
-        modelName: 'prisma-stt-v3',
+        modelName: 'prisma-v3.0',
         operation: 'transcription',
         status: 'success',
         processingTimeMs: result.processingTimeMs,
         requestId: result.requestId,
-      });
+      }).catch(() => {});
 
       sendSuccess(res, {
         transcript: result.transcript,
@@ -39,22 +38,17 @@ export class VoiceController {
         requestId: result.requestId,
       });
     } catch (error: any) {
-      // Log failed attempt
       await AIProcessingLog.create({
         provider: 'prisma',
-        modelName: 'prisma-stt-v3',
+        modelName: 'prisma-v3.0',
         operation: 'transcription',
         status: error.name === 'TimeoutError' ? 'timeout' : 'error',
         processingTimeMs: 0,
         errorMessage: error.message,
       }).catch(() => {});
-
       next(error);
     } finally {
-      // Always clean up uploaded file
-      if (filePath) {
-        deleteUploadedFile(filePath);
-      }
+      if (filePath) deleteUploadedFile(filePath);
     }
   }
 
@@ -63,22 +57,24 @@ export class VoiceController {
     try {
       const { text, language, voice, incidentId, category } = req.body;
 
-      if (!text || typeof text !== 'string') {
-        throw new ValidationError('Text is required');
+      if (!text && !(incidentId && category)) {
+        throw new ValidationError('Either text or incidentId+category is required');
       }
 
-      // If generating incident confirmation, build the text automatically
-      let finalText = text;
-      if (incidentId && category) {
-        const authReq = req as AuthRequest;
-        finalText = buildConfirmationText({
-          category,
-          incidentId,
-          language: language ?? authReq.user?.email ?? 'hi-IN',
-        });
-      }
+      // Build confirmation text if incidentId provided
+      const lang = language || 'hi-IN';
+      const finalText = (incidentId && category)
+        ? buildConfirmationText({ category, incidentId, language: lang })
+        : String(text);
 
-      const result = await timbreService.synthesize(finalText, language, voice);
+      logger.info('TTS synthesis requested', {
+        textLength: finalText.length,
+        language: lang,
+        voice: voice || 'Nalini',
+        incidentId,
+      });
+
+      const result = await timbreService.synthesize(finalText, lang, voice);
 
       await AIProcessingLog.create({
         incidentId,
@@ -90,11 +86,10 @@ export class VoiceController {
       }).catch(() => {});
 
       res.set({
-        'Content-Type': result.mimeType,
-        'Content-Length': result.audioBuffer.length,
+        'Content-Type': 'audio/mpeg',
+        'Content-Length': result.audioBuffer.length.toString(),
         'Cache-Control': 'no-store',
       });
-
       res.status(200).send(result.audioBuffer);
     } catch (error: any) {
       await AIProcessingLog.create({
@@ -105,7 +100,6 @@ export class VoiceController {
         processingTimeMs: 0,
         errorMessage: error.message,
       }).catch(() => {});
-
       next(error);
     }
   }

@@ -15,7 +15,7 @@ export interface PrismaTranscriptionResult {
   requestId?: string;
 }
 
-/** Convert any browser audio (webm/ogg/etc.) to 16kHz mono WAV using ffmpeg */
+/** Convert any browser audio (webm/ogg/etc.) to 16kHz mono WAV using ffmpeg, max 28 seconds */
 function convertToWav(inputPath: string): Promise<string> {
   const outputPath = inputPath.replace(/\.[^.]+$/, '_converted.wav');
   return new Promise((resolve, reject) => {
@@ -24,6 +24,7 @@ function convertToWav(inputPath: string): Promise<string> {
       .audioChannels(1)
       .audioCodec('pcm_s16le')
       .format('wav')
+      .duration(28) // Trim to 28s — Prisma limit is 30s
       .on('end', () => resolve(outputPath))
       .on('error', (err) => reject(new Error(`ffmpeg conversion failed: ${err.message}`)))
       .save(outputPath);

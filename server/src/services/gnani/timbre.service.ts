@@ -21,7 +21,11 @@ const CATEGORY_HINDI: Record<string, string> = {
   Other: 'अन्य समस्या',
 };
 
-export function buildConfirmationText(incident: { category: string; incidentId: string; language: string }): string {
+export function buildConfirmationText(incident: {
+  category: string;
+  incidentId: string;
+  language: string;
+}): string {
   const categoryHindi = CATEGORY_HINDI[incident.category] ?? incident.category;
   if (incident.language === 'hi-IN') {
     return `आपकी ${categoryHindi} से जुड़ी शिकायत सफलतापूर्वक दर्ज कर ली गई है। शिकायत संख्या ${incident.incidentId} है। हमारी टीम जल्द ही इस पर कार्यवाही करेगी। धन्यवाद।`;
@@ -65,39 +69,69 @@ class TimbreService {
         textLength: sanitizedText.length,
         language,
         voice,
+        endpoint: this.endpoint,
       });
 
-      const response = await axios.post(
-        this.endpoint,
-        {
-          text: sanitizedText,
-          voice,
-          model: GNANI_CONFIG.TIMBRE.DEFAULT_MODEL,
-          language,
+      // Request body per Gnani TTS docs
+      const requestBody = {
+        text: sanitizedText,
+        model: GNANI_CONFIG.TIMBRE.DEFAULT_MODEL,
+        voice,
+        language,
+        audio_config: {
+          encoding: 'linear_pcm',
+          container: 'mp3',
+          sample_rate: 22050,
+          num_channels: 1,
+          sample_width: 2,
         },
-        {
-          headers: {
-            'X-API-Key-ID': this.apiKeyId,
-            'Content-Type': 'application/json',
-          },
-          timeout: GNANI_CONFIG.TIMBRE.TIMEOUT,
-          responseType: 'arraybuffer',
-        }
-      );
+      };
+
+      logger.info('Timbre request body', { requestBody: { ...requestBody, text: sanitizedText.substring(0, 50) } });
+
+      const response = await axios.post(this.endpoint, requestBody, {
+        headers: {
+          'X-API-Key-ID': this.apiKeyId,
+          'Content-Type': 'application/json',
+        },
+        timeout: GNANI_CONFIG.TIMBRE.TIMEOUT,
+        responseType: 'arraybuffer',
+      });
 
       const processingTimeMs = Date.now() - startTime;
       const audioBuffer = Buffer.from(response.data);
 
-      logger.info('Timbre TTS success', { audioSize: audioBuffer.length, processingTimeMs });
+      logger.info('Timbre TTS success', {
+        audioSize: audioBuffer.length,
+        processingTimeMs,
+        contentType: response.headers['content-type'],
+      });
 
       return { audioBuffer, mimeType: 'audio/mpeg', processingTimeMs };
     } catch (error: any) {
-      logger.error('Timbre TTS failed', { error: error.message });
+      const processingTimeMs = Date.now() - startTime;
 
-      if (axios.isAxiosError(error)) {
+      // Log the full error response for debugging
+      if (axios.isAxiosError(error) && error.response) {
+        const errData = error.response.data;
+        // arraybuffer error response — convert to string
+        const errText = errData instanceof Buffer
+          ? errData.toString('utf8')
+          : typeof errData === 'object'
+          ? JSON.stringify(errData)
+          : String(errData);
+
+        logger.error('Timbre TTS failed', {
+          status: error.response.status,
+          error: errText,
+          processingTimeMs,
+        });
+
         if (error.code === 'ECONNABORTED') throw new TimeoutError('Timbre TTS timed out');
-        throw new ServiceUnavailableError(`Timbre API error: ${error.response?.status ?? 'unknown'}`);
+        throw new ServiceUnavailableError(`Timbre API error ${error.response.status}: ${errText}`);
       }
+
+      logger.error('Timbre TTS failed', { error: error.message, processingTimeMs });
       throw new ServiceUnavailableError(`Speech synthesis failed: ${error.message}`);
     }
   }
