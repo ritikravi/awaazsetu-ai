@@ -19,7 +19,19 @@ const dashboard_routes_1 = __importDefault(require("./routes/dashboard.routes"))
 const app = (0, express_1.default)();
 // Security middleware
 app.use((0, helmet_1.default)());
-app.use((0, cors_1.default)({ origin: env_1.config.cors.origin, credentials: true }));
+app.use((0, cors_1.default)({
+    origin: (origin, callback) => {
+        const allowed = [
+            'https://awaazsetu-ai.vercel.app',
+            'http://localhost:5173',
+            env_1.config.cors.origin,
+        ];
+        if (!origin || allowed.includes(origin))
+            return callback(null, true);
+        callback(null, false);
+    },
+    credentials: true,
+}));
 // Body parsing
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));

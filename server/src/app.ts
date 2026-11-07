@@ -17,7 +17,18 @@ const app: Application = express();
 
 // Security middleware
 app.use(helmet());
-app.use(cors({ origin: config.cors.origin, credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowed = [
+      'https://awaazsetu-ai.vercel.app',
+      'http://localhost:5173',
+      config.cors.origin,
+    ];
+    if (!origin || allowed.includes(origin)) return callback(null, true);
+    callback(null, false);
+  },
+  credentials: true,
+}));
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));

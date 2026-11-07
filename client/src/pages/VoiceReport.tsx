@@ -1,12 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Mic, Square, Play, Pause, RotateCcw, Upload, CheckCircle,
-  AlertCircle, Volume2, Loader2, MapPin, Tag, Zap, Info
+  AlertCircle, Volume2, Loader2, MapPin, Tag, Zap, Info, Navigation
 } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { SeverityBadge } from '../components/common/SeverityBadge';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import { useGeolocation } from '../hooks/useGeolocation';
 import { IncidentExtraction, IncidentCategory, SeverityLevel } from '../types';
 import api from '../services/api';
 
@@ -21,6 +22,7 @@ const SEVERITIES: SeverityLevel[] = ['Low', 'Medium', 'High', 'Critical'];
 export default function VoiceReport() {
   const navigate = useNavigate();
   const recorder = useVoiceRecorder();
+  const { location: gpsLocation, loading: gpsLoading, getLocation } = useGeolocation();
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const [step, setStep] = useState<Step>('record');
@@ -29,6 +31,19 @@ export default function VoiceReport() {
   const [correctedTranscript, setCorrectedTranscript] = useState('');
   const [analysis, setAnalysis] = useState<IncidentExtraction | null>(null);
   const [editedAnalysis, setEditedAnalysis] = useState<IncidentExtraction | null>(null);
+
+  // Auto-fetch GPS when analysis step loads
+  useEffect(() => {
+    if (step === 'analysis' && editedAnalysis && editedAnalysis.location.name === 'Not specified') {
+      getLocation().then((geo) => {
+        if (geo?.displayName && editedAnalysis) {
+          setEditedAnalysis((prev) =>
+            prev ? { ...prev, location: { name: geo.displayName!, verified: true } } : prev
+          );
+        }
+      });
+    }
+  }, [step]);
   const [confirmedIncidentId, setConfirmedIncidentId] = useState('');
   const [confirmationAudioUrl, setConfirmationAudioUrl] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -96,6 +111,12 @@ export default function VoiceReport() {
         correctedTranscript: correctedTranscript !== transcript ? correctedTranscript : undefined,
         language,
         confidence: analysis?.confidence,
+        ...(gpsLocation && {
+          location: {
+            ...editedAnalysis.location,
+            coordinates: { lat: gpsLocation.lat, lng: gpsLocation.lng },
+          },
+        }),
       });
       const incident = res.data.data.incident;
       setConfirmedIncidentId(incident.incidentId);
@@ -368,14 +389,38 @@ export default function VoiceReport() {
                 <div className="flex gap-2">
                   <input
                     value={editedAnalysis.location.name}
-                    onChange={(e) => setEditedAnalysis({ ...editedAnalysis, location: { name: e.target.value, verified: true } })}
-                    placeholder="Enter location"
+                    onChange={(e) => setEditedAnalysis({ ...editedAnalysis, location: { name: e.target.value, verified: e.target.value.length > 3 } })}
+                    placeholder="Enter or detect location"
                     className="flex-1 bg-black border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                   />
-                  <div className={`px-3 py-2 rounded-lg text-xs font-medium ${editedAnalysis.location.verified ? 'bg-green-600/20 text-green-400' : 'bg-yellow-600/20 text-yellow-400'}`}>
-                    {editedAnalysis.location.verified ? 'Verified' : 'Unverified'}
-                  </div>
+                  <button
+                    onClick={async () => {
+                      const geo = await getLocation();
+                      if (geo?.displayName) {
+                        setEditedAnalysis({
+                          ...editedAnalysis,
+                          location: { name: geo.displayName, verified: true }
+                        });
+                      }
+                    }}
+                    disabled={gpsLoading}
+                    title="Use my current location"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/30 text-blue-400 text-xs font-medium transition-colors disabled:opacity-50 flex-shrink-0"
+                  >
+                    {gpsLoading
+                      ? <Loader2 size={14} className="animate-spin" />
+                      : <Navigation size={14} />}
+                    {gpsLoading ? 'Locating...' : 'GPS'}
+                  </button>
                 </div>
+                {gpsLocation && editedAnalysis.location.verified && (
+                  <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
+                    <CheckCircle size={11} /> GPS location captured
+                  </p>
+                )}
+                {!editedAnalysis.location.verified && editedAnalysis.location.name !== 'Not specified' && (
+                  <p className="text-xs text-yellow-500 mt-1">AI extracted — tap GPS to verify with your real location</p>
+                )}
               </div>
 
               {/* Severity */}
