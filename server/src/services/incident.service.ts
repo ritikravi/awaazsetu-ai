@@ -86,7 +86,9 @@ export class IncidentService {
     const incident = await Incident.findOne({ incidentId }).populate('userId', 'name email');
     if (!incident) throw new NotFoundError(`Incident ${incidentId} not found`);
 
-    if (!isAdmin && incident.userId.toString() !== requestingUserId) {
+    // Admins can see all, citizens can only see their own
+    const ownerId = (incident.userId as any)?._id?.toString() ?? incident.userId.toString();
+    if (!isAdmin && ownerId !== requestingUserId) {
       throw new AuthorizationError('You do not have access to this incident');
     }
 

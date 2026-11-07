@@ -89,38 +89,78 @@ const CATEGORY_RULES: CategoryRule[] = [
 ];
 
 function extractLocationFromText(text: string): { name: string; verified: boolean } {
-  // Look for location indicators in Hindi and English
-  const locationPatterns = [
-    /(?:near|के पास|पर|में|at|in)\s+([A-Za-z\u0900-\u097F\s]{3,30}?)(?:\s*[,।.]|$)/gi,
-    /([A-Za-z\u0900-\u097F]+\s+(?:road|sarak|sadak|nagar|colony|ward|sector|chowk|bazaar|mandi|gali|village|gaon|gram))/gi,
-    /(?:sector|ward|area|block|phase)\s*[-]?\s*\d+/gi,
-    /NH[-]?\d+/gi,
+  // Pattern 1: Location BEFORE ke paas/ke samne etc — most common Hindi pattern
+  const hindiLocationPhrases = [
+    /([A-Za-z\u0900-\u097F]{2,25}(?:\s+[A-Za-z\u0900-\u097F]{2,20})?)\s+(?:ke\s+(?:paas|samne|nazdeek|peeche|aage|baad|niche)|ke\s+(?:पास|सामने|नज़दीक|पीछे|आगे)|पर|में|मोड़|चौराहे)/i,
+    /(?:near|at|in|on|beside|outside|front\s+of|behind)\s+([A-Za-z\u0900-\u097F][A-Za-z\u0900-\u097F\s]{2,30}?)(?:\s*[,।.\n]|$)/i,
   ];
 
-  for (const pattern of locationPatterns) {
+  // Pattern 2: Named locations — Sector X, Ward X, NH-X, Block X
+  const namedPatterns = [
+    /(?:sector|sec)\s*[-]?\s*\d+[A-Z]?/i,
+    /(?:ward|block|phase)\s*[-]?\s*\d+/i,
+    /NH\s*[-]?\s*\d+/i,
+    /plot\s*(?:no\.?\s*)?\d+/i,
+  ];
+
+  // Pattern 3: Colony/Area/Mohalla names (Hindi + English)
+  const areaPattern = /([A-Za-z\u0900-\u097F]{2,20}(?:\s+[A-Za-z\u0900-\u097F]{2,20}){0,3})\s+(?:colony|nagar|vihar|enclave|layout|nagaram|mohalla|mohallah|basti|मोहल्ला|नगर|बस्ती|कॉलोनी|विहार)/i;
+
+  // Pattern 4: Road/Street names
+  const roadPattern = /([A-Za-z\u0900-\u097F]{2,20}(?:\s+[A-Za-z\u0900-\u097F]{2,20}){0,2})\s+(?:road|street|marg|path|sadak|sarak|lane|gali|gallee|रोड|मार्ग|सड़क|गली)/i;
+
+  // Pattern 5: Landmark with "wala/wali" (very common in Hindi speech)
+  const landmarkPattern = /([A-Za-z\u0900-\u097F]{2,20}(?:\s+[A-Za-z\u0900-\u097F]{2,15})?)\s+(?:wala|wali|waale|waali|वाला|वाली|वाले)/i;
+
+  // Pattern 6: Village/Town names
+  const villagePattern = /(?:village|gaon|gram|गाँव|गांव|ग्राम)\s+([A-Za-z\u0900-\u097F]{2,25})/i;
+
+  // Pattern 7: "Hamare ghar ke paas", "Meri gali mein" etc — extract what follows
+  const relativePattern = /(?:hamare|mere|apne|hamari|meri|apni|humare)\s+(?:ghar|gali|mohalle|area|colony|sector|ward|plot)\s+(?:ke?\s+)?(?:paas|samne|mein|mein|par|ka|ki|ke)?\s*([A-Za-z\u0900-\u097F][A-Za-z\u0900-\u097F\s]{2,25}?)(?:\s*[,।.\n]|$)/i;
+
+  const allPatterns = [
+    ...namedPatterns,
+    areaPattern,
+    roadPattern,
+    villagePattern,
+    landmarkPattern,
+    ...hindiLocationPhrases,
+    relativePattern,
+  ];
+
+  for (const pattern of allPatterns) {
     const match = text.match(pattern);
-    if (match?.[0] && match[0].trim().length > 3) {
-      return { name: match[0].trim(), verified: false };
+    if (match) {
+      // Get the most specific group
+      const location = (match[1] || match[0]).trim().replace(/^(?:ke|ki|ka|mein|par|in|at|on|near)\s+/i, '');
+      if (location.length >= 3 && location.length <= 60) {
+        return { name: location, verified: false };
+      }
     }
   }
 
   return { name: 'Not specified', verified: false };
 }
 
-function extractMissingInfo(text: string, category: IncidentCategory): string[] {
+function extractMissingInfo(text: string, category: IncidentCategory, location: { name: string }): string[] {
   const missing: string[] = [];
   const lower = text.toLowerCase();
 
-  if (!lower.match(/(?:sector|ward|colony|nagar|road|gali|gaon|village|near|पास|में|पर)/i)) {
+  // Only flag missing location if we couldn't extract it
+  if (location.name === 'Not specified') {
     missing.push('Exact location or landmark');
   }
-  if (category === 'Water Leakage' && !lower.match(/(?:pipe|नल|पाइप|main|connection)/i)) {
+
+  if (category === 'Water Leakage' && !lower.match(/(?:pipe|नल|पाइप|main|connection|line|लाइन)/i)) {
     missing.push('Type of pipeline (main line or connection)');
   }
-  if (category === 'Road Damage' && !lower.match(/(?:\d+|NH|highway|main|bypass)/i)) {
-    missing.push('Road name or highway number');
+  if (category === 'Road Damage' && !lower.match(/(?:\d+|NH|highway|main|bypass|flyover)/i)) {
+    missing.push('Road name or number');
   }
-  if (!lower.match(/(?:कब|when|since|से|पहले|दिन|day|week|हफ्ते|month|महीने)/i)) {
+  if (category === 'Electrical Hazard' && !lower.match(/(?:pole|तार|wire|transformer|substation)/i)) {
+    missing.push('Type of electrical hazard (wire, pole, transformer)');
+  }
+  if (!lower.match(/(?:कब|when|since|से|पहले|दिन|day|week|हफ्ते|month|महीने|hours?|घंटे)/i)) {
     missing.push('How long has this problem existed');
   }
 
@@ -156,7 +196,7 @@ function runRuleBasedExtraction(transcript: string, language: string): IncidentE
   }
 
   const location = extractLocationFromText(transcript);
-  const missing = extractMissingInfo(transcript, matched.category);
+  const missing = extractMissingInfo(transcript, matched.category, location);
 
   // Confidence based on keyword match strength
   const confidence = Math.min(0.5 + bestScore * 0.1, 0.85);
