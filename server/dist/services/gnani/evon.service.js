@@ -26,49 +26,56 @@ exports.IncidentExtractionSchema = zod_1.z.object({
 });
 const CATEGORY_RULES = [
     {
-        keywords: ['पानी', 'paani', 'water', 'pipe', 'pipeline', 'पाइप', 'रिसाव', 'leak', 'बह', 'flood', 'बाढ़', 'नल', 'nal'],
+        strongKeywords: ['pipeline', 'पाइपलाइन', 'paani ka leakage', 'water pipe', 'नल टूट', 'nal toot', 'water supply'],
+        keywords: ['पानी', 'paani', 'water', 'pipe', 'पाइप', 'रिसाव', 'leak', 'बह रहा', 'flooding', 'बाढ़', 'नल', 'nal', 'paani bah', 'paani nikal'],
         category: 'Water Leakage',
         defaultSeverity: 'High',
         urgencyReason: 'Water leakage causes road damage and public health risk',
         recommendedAction: 'Contact water department for urgent pipeline inspection and repair',
     },
     {
-        keywords: ['सड़क', 'sadak', 'road', 'गड्ढा', 'pothole', 'टूट', 'damage', 'crack', 'highway', 'NH', 'राजमार्ग'],
+        strongKeywords: ['road broken', 'road damage', 'road toot', 'sadak toot', 'pothole', 'gaddha', 'gadda', 'road problem', 'road kharab', 'sarak toot', 'sarak kharab', 'road repair', 'broken road', 'rasta toot'],
+        keywords: ['सड़क', 'sadak', 'road', 'गड्ढा', 'टूट गई', 'टूटी', 'highway', 'NH', 'राजमार्ग', 'rasta', 'path', 'damaged road', 'road condition', 'bad road', 'road mein', 'sadak mein', 'sarak'],
         category: 'Road Damage',
         defaultSeverity: 'Medium',
         urgencyReason: 'Road damage poses risk to vehicles and pedestrians',
         recommendedAction: 'Report to PWD (Public Works Department) for road repair',
     },
     {
-        keywords: ['बिजली', 'bijli', 'electric', 'wire', 'तार', 'shock', 'current', 'pole', 'खंभा', 'hazard', 'खतरा'],
+        strongKeywords: ['bijli ka taar', 'live wire', 'bijli giri', 'electric shock', 'transformer blast', 'pole gira', 'khamba gira', 'taar toot'],
+        keywords: ['बिजली', 'bijli', 'electric', 'wire', 'तार', 'shock', 'current', 'pole', 'खंभा', 'hazard', 'खतरा', 'voltage', 'short circuit'],
         category: 'Electrical Hazard',
         defaultSeverity: 'Critical',
         urgencyReason: 'Electrical hazards pose immediate risk to human life',
         recommendedAction: 'Contact electricity board immediately and cordon off the area',
     },
     {
-        keywords: ['कचरा', 'kachra', 'garbage', 'waste', 'गंदगी', 'dustbin', 'साफ', 'clean', 'trash', 'sewage'],
+        strongKeywords: ['kachra nahi utha', 'garbage collection', 'kuda nahi', 'waste disposal', 'dustbin full', 'safai nahi'],
+        keywords: ['कचरा', 'kachra', 'garbage', 'waste', 'गंदगी', 'dustbin', 'trash', 'कूड़ा', 'kuda'],
         category: 'Waste Management',
         defaultSeverity: 'Medium',
         urgencyReason: 'Waste accumulation causes hygiene issues and disease risk',
         recommendedAction: 'Schedule garbage collection and increase sanitation visits',
     },
     {
-        keywords: ['नाला', 'nala', 'drain', 'drainage', 'blocked', 'जाम', 'overflow', 'sewage', 'सीवर', 'waterlog', 'जलभराव'],
+        strongKeywords: ['nala jam', 'naala jam', 'drainage block', 'sewage overflow', 'paani bhar gaya', 'waterlogging', 'jal bhar'],
+        keywords: ['नाला', 'nala', 'drain', 'drainage', 'blocked', 'जाम', 'overflow', 'sewage', 'सीवर', 'जलभराव', 'sewer'],
         category: 'Drainage Problem',
         defaultSeverity: 'High',
         urgencyReason: 'Blocked drainage causes flooding and health hazards',
         recommendedAction: 'Clear drainage blockage and clean the nalas',
     },
     {
-        keywords: ['safety', 'सुरक्षा', 'crime', 'अपराध', 'theft', 'चोरी', 'accident', 'दुर्घटना', 'fight', 'झगड़ा', 'police', 'पुलिस'],
+        strongKeywords: ['loot', 'theft', 'robbery', 'assault', 'chor', 'danga', 'riot', 'police help', 'crime'],
+        keywords: ['safety', 'सुरक्षा', 'अपराध', 'चोरी', 'दुर्घटना', 'fight', 'झगड़ा', 'police', 'पुलिस', 'danger'],
         category: 'Public Safety',
         defaultSeverity: 'High',
         urgencyReason: 'Public safety incident requires immediate attention',
         recommendedAction: 'Contact local police or emergency services immediately',
     },
     {
-        keywords: ['bridge', 'पुल', 'building', 'इमारत', 'collapse', 'गिर', 'wall', 'दीवार', 'structure', 'crack', 'टूट', 'damage'],
+        strongKeywords: ['bridge toot', 'pul toot', 'building collapse', 'wall collapse', 'deewar giri', 'structure damage'],
+        keywords: ['bridge', 'पुल', 'building', 'इमारत', 'collapse', 'गिर', 'wall', 'दीवार', 'structure', 'crack'],
         category: 'Infrastructure Damage',
         defaultSeverity: 'High',
         urgencyReason: 'Infrastructure damage poses safety risk to public',
@@ -142,17 +149,19 @@ function extractMissingInfo(text, category, location) {
 }
 function runRuleBasedExtraction(transcript, language) {
     const lower = transcript.toLowerCase();
-    // Find best matching category
     let bestMatch = null;
     let bestScore = 0;
     for (const rule of CATEGORY_RULES) {
-        const score = rule.keywords.filter((kw) => lower.includes(kw.toLowerCase())).length;
+        // Strong keywords = 3 points (very specific), regular = 1 point
+        const strongScore = rule.strongKeywords.filter((kw) => lower.includes(kw.toLowerCase())).length * 3;
+        const normalScore = rule.keywords.filter((kw) => lower.includes(kw.toLowerCase())).length;
+        const score = strongScore + normalScore;
         if (score > bestScore) {
             bestScore = score;
             bestMatch = rule;
         }
     }
-    const matched = bestMatch ?? { ...CATEGORY_RULES[7], category: 'Other' }; // default Other
+    const matched = bestMatch ?? { strongKeywords: [], keywords: [], category: 'Other', defaultSeverity: 'Medium', urgencyReason: 'Incident reported by user', recommendedAction: 'Review and assign to appropriate department' };
     // Build a clean description — limit to 200 chars, trim to sentence boundary
     let description = transcript.trim();
     if (description.length > 200) {
