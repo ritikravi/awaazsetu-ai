@@ -72,10 +72,27 @@ export default function VoiceReport() {
       setTranscript(t);
       setCorrectedTranscript(t);
       setStep('transcript');
+
+      // Auto-analyze immediately after transcription
+      autoAnalyze(t, res.data.data.language ?? language);
     } catch (err: any) {
       setError(err.response?.data?.error?.message ?? 'Transcription failed. Please try again.');
     } finally {
       setProcessing(false);
+    }
+  };
+
+  // Auto-analyze runs in background after transcription
+  const autoAnalyze = async (t: string, lang: string) => {
+    if (!t.trim()) return;
+    try {
+      const res = await api.post('/ai/analyze', { transcript: t, language: lang });
+      const result = res.data.data as IncidentExtraction;
+      setAnalysis(result);
+      setEditedAnalysis({ ...result });
+      // Don't advance step — user can still edit transcript
+    } catch {
+      // Silent — user can still manually trigger analysis
     }
   };
 
@@ -306,12 +323,42 @@ export default function VoiceReport() {
             <div className="flex items-center gap-2 text-green-400 text-sm mb-6">
               <CheckCircle size={16} /> Prisma STT transcription complete
             </div>
+
+            {/* Live category preview */}
+            {analysis && (
+              <div className="mb-6 p-4 bg-blue-600/10 border border-blue-600/20 rounded-xl">
+                <div className="text-xs text-blue-400 mb-2 flex items-center gap-1">
+                  <Zap size={12} /> AI instantly detected
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-white font-semibold text-sm">{analysis.category}</span>
+                  <SeverityBadge severity={analysis.severity} />
+                  {analysis.confidence && (
+                    <span className="text-xs text-gray-500">
+                      {(analysis.confidence * 100).toFixed(0)}% confidence
+                    </span>
+                  )}
+                </div>
+                {analysis.location.name !== 'Not specified' && (
+                  <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                    <MapPin size={11} /> {analysis.location.name}
+                  </div>
+                )}
+              </div>
+            )}
+
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Transcript — review and correct if needed
             </label>
             <textarea
               value={correctedTranscript}
-              onChange={(e) => setCorrectedTranscript(e.target.value)}
+              onChange={(e) => {
+                setCorrectedTranscript(e.target.value);
+                // Re-analyze on significant change
+                if (Math.abs(e.target.value.length - transcript.length) > 10) {
+                  autoAnalyze(e.target.value, language);
+                }
+              }}
               rows={5}
               className="w-full bg-black border border-white/10 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
             />
@@ -334,7 +381,7 @@ export default function VoiceReport() {
               >
                 {processing
                   ? <><Loader2 size={16} className="animate-spin" /> Analyzing with Evon...</>
-                  : <><Zap size={16} /> Analyze with AI</>}
+                  : <><Zap size={16} /> {analysis ? 'Confirm & Review Details' : 'Analyze with AI'}</>}
               </button>
             </div>
           </div>
