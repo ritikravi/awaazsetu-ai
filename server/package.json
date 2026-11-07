@@ -18,6 +18,9 @@
   ],
   "author": "AwaazSetu Team",
   "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0 <22.0.0"
+  },
   "dependencies": {
     "@types/fluent-ffmpeg": "^2.1.28",
     "axios": "^1.6.2",
