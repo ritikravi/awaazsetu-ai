@@ -3,7 +3,7 @@ import { INCIDENT_CATEGORIES, SEVERITY_LEVELS, INCIDENT_STATUSES } from '../conf
 
 export const createIncidentSchema = z.object({
   body: z.object({
-    category: z.enum(INCIDENT_CATEGORIES),
+    category: z.string().min(2).max(50), // Allow dynamic categories
     description: z.string().min(10).max(500),
     location: z.object({ name: z.string().min(1), verified: z.boolean().optional() }),
     severity: z.enum(SEVERITY_LEVELS),
@@ -21,7 +21,7 @@ export const updateIncidentSchema = z.object({
   body: z.object({
     description: z.string().min(10).max(500).optional(),
     location: z.object({ name: z.string().min(1) }).optional(),
-    category: z.enum(INCIDENT_CATEGORIES).optional(),
+    category: z.string().min(2).max(50).optional(), // Allow dynamic categories
     severity: z.enum(SEVERITY_LEVELS).optional(),
   }),
 });

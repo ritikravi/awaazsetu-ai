@@ -1,6 +1,6 @@
 import { z } from 'zod';
 export declare const IncidentExtractionSchema: z.ZodObject<{
-    category: z.ZodEnum<["Water Leakage", "Road Damage", "Electrical Hazard", "Waste Management", "Drainage Problem", "Public Safety", "Infrastructure Damage", "Other"]>;
+    category: z.ZodString;
     description: z.ZodString;
     location: z.ZodObject<{
         name: z.ZodString;
@@ -21,27 +21,27 @@ export declare const IncidentExtractionSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     description: string;
     language: string;
-    category: "Water Leakage" | "Road Damage" | "Electrical Hazard" | "Waste Management" | "Drainage Problem" | "Public Safety" | "Infrastructure Damage" | "Other";
+    category: string;
+    recommendedAction: string;
     location: {
         verified: boolean;
         name: string;
     };
     severity: "Low" | "Medium" | "High" | "Critical";
     urgencyReason: string;
-    recommendedAction: string;
     missingInformation: string[];
     confidence?: number | undefined;
 }, {
     description: string;
     language: string;
-    category: "Water Leakage" | "Road Damage" | "Electrical Hazard" | "Waste Management" | "Drainage Problem" | "Public Safety" | "Infrastructure Damage" | "Other";
+    category: string;
+    recommendedAction: string;
     location: {
         verified: boolean;
         name: string;
     };
     severity: "Low" | "Medium" | "High" | "Critical";
     urgencyReason: string;
-    recommendedAction: string;
     missingInformation: string[];
     confidence?: number | undefined;
 }>;

@@ -160,6 +160,7 @@ export default function VoiceReport() {
           incidentId: incident.incidentId,
           category: incident.category,
           language: incident.language || language,
+          recommendedAction: incident.recommendedAction,
         }, { responseType: 'arraybuffer' });
         const blob = new Blob([audioRes.data], { type: 'audio/mpeg' });
         setConfirmationAudioUrl(URL.createObjectURL(blob));
@@ -427,12 +428,24 @@ export default function VoiceReport() {
               <div>
                 <label className="text-xs text-gray-500 uppercase tracking-wider flex items-center gap-1 mb-2"><Tag size={11} /> Category</label>
                 <select
-                  value={editedAnalysis.category}
-                  onChange={(e) => setEditedAnalysis({ ...editedAnalysis, category: e.target.value as IncidentCategory })}
+                  value={CATEGORIES.includes(editedAnalysis.category as any) ? editedAnalysis.category : 'custom'}
+                  onChange={(e) => {
+                    if (e.target.value !== 'custom') {
+                      setEditedAnalysis({ ...editedAnalysis, category: e.target.value as IncidentCategory });
+                    }
+                  }}
                   className="w-full bg-black border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 >
                   {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {!CATEGORIES.includes(editedAnalysis.category as any) && (
+                    <option value="custom">🆕 {editedAnalysis.category}</option>
+                  )}
                 </select>
+                {!CATEGORIES.includes(editedAnalysis.category as any) && (
+                  <p className="text-xs text-blue-400 mt-1 flex items-center gap-1">
+                    ✨ New category auto-detected: <span className="font-medium">{editedAnalysis.category}</span>
+                  </p>
+                )}
               </div>
 
               {/* Description */}

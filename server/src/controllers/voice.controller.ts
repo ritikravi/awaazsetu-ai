@@ -64,7 +64,7 @@ export class VoiceController {
       // Build confirmation text if incidentId provided
       const lang = language || 'hi-IN';
       const finalText = (incidentId && category)
-        ? buildConfirmationText({ category, incidentId, language: lang })
+        ? buildConfirmationText({ category, incidentId, language: lang, recommendedAction: req.body.recommendedAction })
         : String(text);
 
       logger.info('TTS synthesis requested', {

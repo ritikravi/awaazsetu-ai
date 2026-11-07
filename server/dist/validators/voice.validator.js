@@ -10,6 +10,7 @@ exports.speakSchema = zod_1.z.object({
         voice: zod_1.z.string().optional(),
         incidentId: zod_1.z.string().optional(),
         category: zod_1.z.string().optional(),
+        recommendedAction: zod_1.z.string().max(300).optional(),
     }).refine((data) => data.text || (data.incidentId && data.category), { message: 'Either text or incidentId+category is required' }),
 });
 exports.analyzeSchema = zod_1.z.object({

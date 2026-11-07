@@ -74,7 +74,7 @@ const incidentSchema = new Schema<IIncident>(
     category: {
       type: String,
       required: true,
-      enum: INCIDENT_CATEGORIES,
+      // Allow both fixed and dynamic categories
     },
     description: {
       type: String,

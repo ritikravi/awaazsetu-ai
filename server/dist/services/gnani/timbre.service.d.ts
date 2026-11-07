@@ -7,6 +7,7 @@ export declare function buildConfirmationText(incident: {
     category: string;
     incidentId: string;
     language: string;
+    recommendedAction?: string;
 }): string;
 declare class TimbreService {
     private readonly endpoint;

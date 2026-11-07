@@ -6,30 +6,35 @@ export declare const speakSchema: z.ZodObject<{
         voice: z.ZodOptional<z.ZodString>;
         incidentId: z.ZodOptional<z.ZodString>;
         category: z.ZodOptional<z.ZodString>;
+        recommendedAction: z.ZodOptional<z.ZodString>;
     }, "strip", z.ZodTypeAny, {
         text?: string | undefined;
         language?: "hi-IN" | "en-IN" | undefined;
         incidentId?: string | undefined;
         voice?: string | undefined;
         category?: string | undefined;
+        recommendedAction?: string | undefined;
     }, {
         text?: string | undefined;
         language?: "hi-IN" | "en-IN" | undefined;
         incidentId?: string | undefined;
         voice?: string | undefined;
         category?: string | undefined;
+        recommendedAction?: string | undefined;
     }>, {
         text?: string | undefined;
         language?: "hi-IN" | "en-IN" | undefined;
         incidentId?: string | undefined;
         voice?: string | undefined;
         category?: string | undefined;
+        recommendedAction?: string | undefined;
     }, {
         text?: string | undefined;
         language?: "hi-IN" | "en-IN" | undefined;
         incidentId?: string | undefined;
         voice?: string | undefined;
         category?: string | undefined;
+        recommendedAction?: string | undefined;
     }>;
 }, "strip", z.ZodTypeAny, {
     body: {
@@ -38,6 +43,7 @@ export declare const speakSchema: z.ZodObject<{
         incidentId?: string | undefined;
         voice?: string | undefined;
         category?: string | undefined;
+        recommendedAction?: string | undefined;
     };
 }, {
     body: {
@@ -46,6 +52,7 @@ export declare const speakSchema: z.ZodObject<{
         incidentId?: string | undefined;
         voice?: string | undefined;
         category?: string | undefined;
+        recommendedAction?: string | undefined;
     };
 }>;
 export declare const analyzeSchema: z.ZodObject<{

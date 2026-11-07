@@ -15,7 +15,7 @@ export interface Location {
 export type IncidentCategory =
   | 'Water Leakage' | 'Road Damage' | 'Electrical Hazard'
   | 'Waste Management' | 'Drainage Problem' | 'Public Safety'
-  | 'Infrastructure Damage' | 'Other';
+  | 'Infrastructure Damage' | 'Other' | string; // Allow dynamic categories
 
 export type SeverityLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 

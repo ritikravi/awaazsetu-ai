@@ -52,7 +52,7 @@ const incidentSchema = new mongoose_1.Schema({
     category: {
         type: String,
         required: true,
-        enum: constants_1.INCIDENT_CATEGORIES,
+        // Allow both fixed and dynamic categories
     },
     description: {
         type: String,

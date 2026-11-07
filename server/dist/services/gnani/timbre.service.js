@@ -23,9 +23,17 @@ const CATEGORY_HINDI = {
 function buildConfirmationText(incident) {
     const categoryHindi = CATEGORY_HINDI[incident.category] ?? incident.category;
     if (incident.language === 'hi-IN') {
-        return `आपकी ${categoryHindi} से जुड़ी शिकायत सफलतापूर्वक दर्ज कर ली गई है। शिकायत संख्या ${incident.incidentId} है। हमारी टीम जल्द ही इस पर कार्यवाही करेगी। धन्यवाद।`;
+        const base = `आपकी ${categoryHindi} से जुड़ी शिकायत सफलतापूर्वक दर्ज कर ली गई है। शिकायत संख्या ${incident.incidentId} है।`;
+        const solution = incident.recommendedAction
+            ? ` अनुशंसित कार्यवाही: ${incident.recommendedAction}`
+            : ' हमारी टीम जल्द ही इस पर कार्यवाही करेगी।';
+        return base + solution + ' धन्यवाद।';
     }
-    return `Your ${incident.category} complaint has been successfully registered. Incident ID is ${incident.incidentId}. Our team will take action soon. Thank you.`;
+    const base = `Your ${incident.category} complaint has been successfully registered. Incident ID is ${incident.incidentId}.`;
+    const solution = incident.recommendedAction
+        ? ` Recommended action: ${incident.recommendedAction}`
+        : ' Our team will take action soon.';
+    return base + solution + ' Thank you.';
 }
 class TimbreService {
     constructor() {

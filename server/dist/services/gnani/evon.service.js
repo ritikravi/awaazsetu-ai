@@ -11,7 +11,7 @@ const constants_1 = require("../../config/constants");
 const logger_1 = require("../../utils/logger");
 const errorTypes_1 = require("../../utils/errorTypes");
 exports.IncidentExtractionSchema = zod_1.z.object({
-    category: zod_1.z.enum(constants_1.INCIDENT_CATEGORIES),
+    category: zod_1.z.string().min(2).max(50), // Allow dynamic categories beyond the 8 fixed ones
     description: zod_1.z.string().min(5).max(500),
     location: zod_1.z.object({ name: zod_1.z.string(), verified: zod_1.z.boolean() }),
     severity: zod_1.z.enum(constants_1.SEVERITY_LEVELS),
@@ -140,6 +140,35 @@ function extractMissingInfo(text, category, location) {
         missing.push('How long has this problem existed');
     return missing;
 }
+function extractDynamicCategory(transcript) {
+    const lower = transcript.toLowerCase();
+    // Map common problem types to friendly category names
+    const dynamicMappings = [
+        { patterns: ['street light', 'light nahi', 'bulb fused', 'lamp post', 'street lamp', 'lights off', 'batti nahi'], category: 'Street Light Issue', urgency: 'Poor lighting poses safety risk at night', action: 'Contact municipality to repair/replace street lights' },
+        { patterns: ['tree fell', 'ped gir', 'tree gir', 'branches', 'daali toot', 'jungle', 'overgrown'], category: 'Tree/Vegetation Issue', urgency: 'Fallen trees or overgrown vegetation can block roads and cause accidents', action: 'Contact horticulture department for tree removal or trimming' },
+        { patterns: ['stray dog', 'awara kutta', 'dog bite', 'dog attack', 'animal', 'janwar', 'cow', 'suar'], category: 'Stray Animal Menace', urgency: 'Stray animals pose risk of bites and accidents', action: 'Contact municipal animal control department' },
+        { patterns: ['park', 'garden', 'bagh', 'ground', 'playground', 'khel maidan', 'maidan'], category: 'Public Space Issue', urgency: 'Poor maintenance of public spaces affects community well-being', action: 'Report to parks department for maintenance' },
+        { patterns: ['noise', 'shor', 'pollution', 'dhuan', 'smoke', 'factory', 'air quality'], category: 'Pollution Issue', urgency: 'Pollution affects public health and environment', action: 'File complaint with Pollution Control Board' },
+        { patterns: ['hospital', 'clinic', 'doctor', 'medicine', 'health', 'beemar', 'dawai'], category: 'Healthcare Issue', urgency: 'Healthcare access issues affect public well-being', action: 'Contact district health officer or CMO' },
+        { patterns: ['school', 'college', 'teacher', 'education', 'students', 'padhai'], category: 'Education Issue', urgency: 'Education quality issues affect student development', action: 'Contact district education officer' },
+        { patterns: ['footpath', 'pavement', 'divider', 'railing', 'signboard', 'traffic light', 'signal'], category: 'Traffic Infrastructure', urgency: 'Traffic infrastructure damage can cause accidents', action: 'Report to traffic department or municipality' },
+        { patterns: ['mobile network', 'internet', 'signal nahi', 'tower', 'connectivity', 'network problem'], category: 'Connectivity Issue', urgency: 'Poor connectivity affects communication and emergency services', action: 'Contact telecom provider or TRAI for connectivity issues' },
+        { patterns: ['ration', 'food', 'pds', 'anaj', 'ration card', 'distribution'], category: 'Public Distribution Issue', urgency: 'Food distribution issues affect vulnerable populations', action: 'Contact district food supply officer or PDS office' },
+    ];
+    for (const mapping of dynamicMappings) {
+        if (mapping.patterns.some(p => lower.includes(p))) {
+            return { category: mapping.category, urgencyReason: mapping.urgency, recommendedAction: mapping.action };
+        }
+    }
+    // Fallback — extract a noun phrase from the transcript as the category
+    const words = transcript.split(/\s+/).filter(w => w.length > 3);
+    const categoryName = words.slice(0, 3).join(' ').substring(0, 30) || 'Other Issue';
+    return {
+        category: categoryName,
+        urgencyReason: 'Citizen reported an issue requiring attention',
+        recommendedAction: 'Review and forward to appropriate government department',
+    };
+}
 function runRuleBasedExtraction(transcript, language) {
     const lower = transcript.toLowerCase();
     let bestMatch = null;
@@ -153,23 +182,42 @@ function runRuleBasedExtraction(transcript, language) {
             bestMatch = rule;
         }
     }
-    // Score < 2 = no confident match → Other
-    const matched = (bestMatch && bestScore >= 2) ? bestMatch : {
-        strongKeywords: [], keywords: [],
-        category: 'Other',
-        defaultSeverity: 'Medium',
-        urgencyReason: 'Incident does not clearly match standard infrastructure categories',
-        recommendedAction: 'Review the complaint and assign to the appropriate department',
-    };
-    const description = buildDescription(transcript, matched.category);
+    const description = buildDescription(transcript, 'Other');
     const location = extractLocationFromText(transcript);
-    const severity = detectSeverity(lower, matched.defaultSeverity);
-    const missing = extractMissingInfo(transcript, matched.category, location);
+    const severity = detectSeverity(lower, 'Medium');
     const confidence = Math.min(0.4 + bestScore * 0.08, 0.88);
-    logger_1.logger.info('Rule-based extraction', {
-        category: matched.category, severity, score: bestScore, confidence,
-    });
-    return { category: matched.category, description, location, severity, urgencyReason: matched.urgencyReason, recommendedAction: matched.recommendedAction, language, missingInformation: missing, confidence };
+    // Use matched rule if confident, otherwise use dynamic category extraction
+    let category;
+    let urgencyReason;
+    let recommendedAction;
+    let finalSeverity;
+    if (bestMatch && bestScore >= 2) {
+        category = bestMatch.category;
+        urgencyReason = bestMatch.urgencyReason;
+        recommendedAction = bestMatch.recommendedAction;
+        finalSeverity = detectSeverity(lower, bestMatch.defaultSeverity);
+    }
+    else {
+        // No standard category matched — dynamically detect
+        const dynamic = extractDynamicCategory(transcript);
+        category = dynamic.category;
+        urgencyReason = dynamic.urgencyReason;
+        recommendedAction = dynamic.recommendedAction;
+        finalSeverity = detectSeverity(lower, 'Medium');
+    }
+    const missing = extractMissingInfo(transcript, category, location);
+    logger_1.logger.info('Rule-based extraction', { category, severity: finalSeverity, score: bestScore, confidence });
+    return {
+        category: category ?? 'Other',
+        description,
+        location,
+        severity: finalSeverity,
+        urgencyReason,
+        recommendedAction,
+        language,
+        missingInformation: missing,
+        confidence,
+    };
 }
 // ─────────────────────────────────────────────────────────────────────────────
 class EvonService {

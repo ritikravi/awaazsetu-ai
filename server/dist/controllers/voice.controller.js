@@ -60,7 +60,7 @@ class VoiceController {
             // Build confirmation text if incidentId provided
             const lang = language || 'hi-IN';
             const finalText = (incidentId && category)
-                ? (0, timbre_service_1.buildConfirmationText)({ category, incidentId, language: lang })
+                ? (0, timbre_service_1.buildConfirmationText)({ category, incidentId, language: lang, recommendedAction: req.body.recommendedAction })
                 : String(text);
             logger_1.logger.info('TTS synthesis requested', {
                 textLength: finalText.length,

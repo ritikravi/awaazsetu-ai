@@ -8,6 +8,7 @@ export const speakSchema = z.object({
     voice: z.string().optional(),
     incidentId: z.string().optional(),
     category: z.string().optional(),
+    recommendedAction: z.string().max(300).optional(),
   }).refine(
     (data) => data.text || (data.incidentId && data.category),
     { message: 'Either text or incidentId+category is required' }

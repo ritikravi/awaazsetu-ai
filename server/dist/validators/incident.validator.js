@@ -5,7 +5,7 @@ const zod_1 = require("zod");
 const constants_1 = require("../config/constants");
 exports.createIncidentSchema = zod_1.z.object({
     body: zod_1.z.object({
-        category: zod_1.z.enum(constants_1.INCIDENT_CATEGORIES),
+        category: zod_1.z.string().min(2).max(50), // Allow dynamic categories
         description: zod_1.z.string().min(10).max(500),
         location: zod_1.z.object({ name: zod_1.z.string().min(1), verified: zod_1.z.boolean().optional() }),
         severity: zod_1.z.enum(constants_1.SEVERITY_LEVELS),
@@ -22,7 +22,7 @@ exports.updateIncidentSchema = zod_1.z.object({
     body: zod_1.z.object({
         description: zod_1.z.string().min(10).max(500).optional(),
         location: zod_1.z.object({ name: zod_1.z.string().min(1) }).optional(),
-        category: zod_1.z.enum(constants_1.INCIDENT_CATEGORIES).optional(),
+        category: zod_1.z.string().min(2).max(50).optional(), // Allow dynamic categories
         severity: zod_1.z.enum(constants_1.SEVERITY_LEVELS).optional(),
     }),
 });
