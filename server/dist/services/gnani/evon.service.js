@@ -118,9 +118,12 @@ function extractLocationFromText(text) {
     for (const pattern of patterns) {
         const match = text.match(pattern);
         if (match) {
-            const loc = (match[1] || match[0]).trim().replace(/^(?:ke|ki|ka|mein|par|in|at|on|near)\s+/i, '');
-            if (loc.length >= 3 && loc.length <= 60)
+            const loc = (match[1] || match[0]).trim().replace(/^(?:ke|ki|ka|mein|par|in|at|on|near)\s+/i, '').trim();
+            // Filter out non-location text (conjunctions, pronouns, short words)
+            const invalidWords = /^(and|or|but|so|the|a|an|is|was|मैं|मेरे|हम|यह|वह|और|तो|जो|कि|हूं|हूँ|tha|hai|hoon)\b/i;
+            if (loc.length >= 4 && loc.length <= 60 && !invalidWords.test(loc) && !/^\d+$/.test(loc)) {
                 return { name: loc, verified: false };
+            }
         }
     }
     return { name: 'Not specified', verified: false };
@@ -143,14 +146,26 @@ function extractMissingInfo(text, category, location) {
 function extractDynamicCategory(transcript) {
     const lower = transcript.toLowerCase();
     // Check if this is actually a problem/complaint
-    const complaintWords = ['problem', 'nahi hai', 'nahi chal', 'kharab', 'toot', 'jam', 'bhar', 'gir', 'leak', 'complaint', 'shikayat', 'pareshani', 'dikkat', 'mushkil', 'band', 'broken', 'damaged', 'nahi ata', 'nahi milta', 'fix', 'repair', 'समस्या', 'परेशानी', 'दिक्कत', 'टूट', 'खराब', 'शिकायत'];
+    const complaintWords = [
+        // Infrastructure complaint words
+        'problem', 'nahi hai', 'nahi chal', 'kharab', 'toot', 'jam', 'bhar', 'gir', 'leak',
+        'complaint', 'shikayat', 'pareshani', 'dikkat', 'mushkil', 'band', 'broken', 'damaged',
+        'nahi ata', 'nahi milta', 'fix', 'repair', 'समस्या', 'परेशानी', 'दिक्कत', 'टूट', 'खराब', 'शिकायत',
+        // Harm/injury words — always a valid complaint
+        'kata', 'kaata', 'bite', 'attack', 'hurt', 'chot lagi', 'ghav', 'injury', 'accident',
+        'gir gaya', 'gir gayi', 'laga', 'lagi', 'dard', 'khoon', 'blood', 'pain',
+        'काटा', 'चोट', 'घाव', 'दर्द', 'खून',
+        // Action/report words
+        'report', 'batana', 'bata raha', 'complaint karna', 'help', 'madad', 'koi sune',
+        'dekhna chahiye', 'hona chahiye', 'sahi karo', 'thik karo', 'band karo',
+    ];
     const hasComplaintIntent = complaintWords.some(kw => lower.includes(kw));
     if (!hasComplaintIntent) {
         return { category: 'Other', urgencyReason: 'The description does not clearly indicate an infrastructure problem', recommendedAction: 'Please describe the specific problem you want to report (e.g. road damage, water leakage, etc.)', isValidComplaint: false };
     }
     const dynamicMappings = [
         { patterns: ['street light', 'light nahi', 'lamp band', 'batti nahi', 'andhera', 'roshni nahi', 'light off', 'bulb fused'], category: 'Street Light Issue', urgency: 'Poor lighting poses safety risk at night', action: 'Contact municipality to repair/replace street lights' },
-        { patterns: ['stray dog', 'awara kutta', 'dog bite', 'dog attack', 'awara janwar', 'kutta kata', 'cow on road', 'janwar'], category: 'Stray Animal Menace', urgency: 'Stray animals pose risk of bites and accidents', action: 'Contact municipal animal control department immediately' },
+        { patterns: ['stray dog', 'awara kutta', 'dog bite', 'dog attack', 'awara janwar', 'kutta kata', 'kutta kaata', 'kutte ne kata', 'kutte ne kaata', 'cow on road', 'janwar ne kata', 'billi ne kata', 'animal bite', 'jaanwar'], category: 'Stray Animal Menace', urgency: 'Stray animals pose risk of bites and accidents', action: 'Contact municipal animal control department immediately. Go to nearest hospital for anti-rabies injection if bitten' },
         { patterns: ['tree fell', 'ped gira', 'tree gira', 'daali toot', 'pedo ko', 'tree blocking road', 'overgrown'], category: 'Tree/Vegetation Issue', urgency: 'Fallen tree can block road and cause accidents', action: 'Contact horticulture department for tree removal' },
         { patterns: ['footpath toot', 'pavement kharab', 'divider toot', 'railing gir', 'signboard missing', 'traffic signal band'], category: 'Traffic Infrastructure', urgency: 'Damaged traffic infrastructure causes accidents', action: 'Report to Traffic Police and municipal corporation' },
         { patterns: ['dhuan aa raha', 'smoke nahi', 'pollution ho raha', 'factory se dhuan', 'air quality', 'chemical smell', 'badbu'], category: 'Pollution Issue', urgency: 'Pollution affects public health', action: 'File complaint with State Pollution Control Board' },
