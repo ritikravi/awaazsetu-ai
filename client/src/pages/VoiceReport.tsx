@@ -32,18 +32,34 @@ export default function VoiceReport() {
   const [analysis, setAnalysis] = useState<IncidentExtraction | null>(null);
   const [editedAnalysis, setEditedAnalysis] = useState<IncidentExtraction | null>(null);
 
-  // Auto-fetch GPS when analysis step loads
+  // Auto-fetch GPS immediately when component mounts AND when analysis step loads
   useEffect(() => {
-    if (step === 'analysis' && editedAnalysis && editedAnalysis.location.name === 'Not specified') {
-      getLocation().then((geo) => {
-        if (geo?.displayName && editedAnalysis) {
+    // Pre-fetch GPS as soon as recording page loads (in background)
+    getLocation();
+  }, []);
+
+  // Apply GPS location when analysis is ready and location is not specified
+  useEffect(() => {
+    if (step === 'analysis' && editedAnalysis) {
+      if (editedAnalysis.location.name === 'Not specified' || editedAnalysis.location.name === '') {
+        if (gpsLocation?.displayName) {
+          // GPS already fetched — apply immediately
           setEditedAnalysis((prev) =>
-            prev ? { ...prev, location: { name: geo.displayName!, verified: true } } : prev
+            prev ? { ...prev, location: { name: gpsLocation.displayName!, verified: true } } : prev
           );
+        } else {
+          // Fetch GPS now
+          getLocation().then((geo) => {
+            if (geo?.displayName) {
+              setEditedAnalysis((prev) =>
+                prev ? { ...prev, location: { name: geo.displayName!, verified: true } } : prev
+              );
+            }
+          });
         }
-      });
+      }
     }
-  }, [step]);
+  }, [step, editedAnalysis?.location.name]);
   const [confirmedIncidentId, setConfirmedIncidentId] = useState('');
   const [confirmationAudioUrl, setConfirmationAudioUrl] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -437,7 +453,7 @@ export default function VoiceReport() {
                   <input
                     value={editedAnalysis.location.name}
                     onChange={(e) => setEditedAnalysis({ ...editedAnalysis, location: { name: e.target.value, verified: e.target.value.length > 3 } })}
-                    placeholder="Enter or detect location"
+                    placeholder="Detecting your location..."
                     className="flex-1 bg-black border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                   />
                   <button
@@ -457,16 +473,17 @@ export default function VoiceReport() {
                     {gpsLoading
                       ? <Loader2 size={14} className="animate-spin" />
                       : <Navigation size={14} />}
-                    {gpsLoading ? 'Locating...' : 'GPS'}
+                    {gpsLoading ? '...' : 'GPS'}
                   </button>
                 </div>
-                {gpsLocation && editedAnalysis.location.verified && (
+                {editedAnalysis.location.verified ? (
                   <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
-                    <CheckCircle size={11} /> GPS location captured
+                    <CheckCircle size={11} /> GPS location verified
                   </p>
-                )}
-                {!editedAnalysis.location.verified && editedAnalysis.location.name !== 'Not specified' && (
-                  <p className="text-xs text-yellow-500 mt-1">AI extracted — tap GPS to verify with your real location</p>
+                ) : (
+                  <p className="text-xs text-yellow-500 mt-1">
+                    {gpsLoading ? '📍 Detecting your location...' : 'Tap GPS to use your real location'}
+                  </p>
                 )}
               </div>
 
