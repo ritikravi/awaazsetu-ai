@@ -2,7 +2,6 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { config } from '../config/env';
-import { SUPPORTED_AUDIO_FORMATS } from '../config/constants';
 
 // Ensure uploads directory exists
 const uploadDir = config.upload.uploadDir;
@@ -26,10 +25,15 @@ const fileFilter = (
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ) => {
-  if (SUPPORTED_AUDIO_FORMATS.includes(file.mimetype as any)) {
+  const accepted = [
+    'audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/ogg',
+    'audio/webm', 'audio/flac', 'audio/aac', 'audio/mp4',
+    'audio/x-m4a', 'audio/m4a',
+  ];
+  if (accepted.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error(`Unsupported file type: ${file.mimetype}. Supported: ${SUPPORTED_AUDIO_FORMATS.join(', ')}`));
+    cb(new Error(`Unsupported audio format: ${file.mimetype}`));
   }
 };
 

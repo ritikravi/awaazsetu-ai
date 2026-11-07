@@ -42,10 +42,16 @@ export default function VoiceReport() {
     setError('');
     try {
       const formData = new FormData();
-      formData.append('audio', recorder.audioBlob, 'recording.webm');
+
+      // Browser records webm — server maps it to ogg for Gnani Prisma
+      const mimeType = recorder.audioBlob.type || 'audio/webm';
+      const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+      formData.append('audio', recorder.audioBlob, `recording.${ext}`);
       formData.append('language', language);
+
       const res = await api.post('/voice/transcribe', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 35000,
       });
       const t = res.data.data.transcript as string;
       setTranscript(t);
