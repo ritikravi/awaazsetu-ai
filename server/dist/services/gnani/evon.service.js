@@ -142,32 +142,30 @@ function extractMissingInfo(text, category, location) {
 }
 function extractDynamicCategory(transcript) {
     const lower = transcript.toLowerCase();
-    // Map common problem types to friendly category names
+    // Check if this is actually a problem/complaint
+    const complaintWords = ['problem', 'nahi hai', 'nahi chal', 'kharab', 'toot', 'jam', 'bhar', 'gir', 'leak', 'complaint', 'shikayat', 'pareshani', 'dikkat', 'mushkil', 'band', 'broken', 'damaged', 'nahi ata', 'nahi milta', 'fix', 'repair', 'समस्या', 'परेशानी', 'दिक्कत', 'टूट', 'खराब', 'शिकायत'];
+    const hasComplaintIntent = complaintWords.some(kw => lower.includes(kw));
+    if (!hasComplaintIntent) {
+        return { category: 'Other', urgencyReason: 'The description does not clearly indicate an infrastructure problem', recommendedAction: 'Please describe the specific problem you want to report (e.g. road damage, water leakage, etc.)', isValidComplaint: false };
+    }
     const dynamicMappings = [
-        { patterns: ['street light', 'light nahi', 'bulb fused', 'lamp post', 'street lamp', 'lights off', 'batti nahi'], category: 'Street Light Issue', urgency: 'Poor lighting poses safety risk at night', action: 'Contact municipality to repair/replace street lights' },
-        { patterns: ['tree fell', 'ped gir', 'tree gir', 'branches', 'daali toot', 'jungle', 'overgrown'], category: 'Tree/Vegetation Issue', urgency: 'Fallen trees or overgrown vegetation can block roads and cause accidents', action: 'Contact horticulture department for tree removal or trimming' },
-        { patterns: ['stray dog', 'awara kutta', 'dog bite', 'dog attack', 'animal', 'janwar', 'cow', 'suar'], category: 'Stray Animal Menace', urgency: 'Stray animals pose risk of bites and accidents', action: 'Contact municipal animal control department' },
-        { patterns: ['park', 'garden', 'bagh', 'ground', 'playground', 'khel maidan', 'maidan'], category: 'Public Space Issue', urgency: 'Poor maintenance of public spaces affects community well-being', action: 'Report to parks department for maintenance' },
-        { patterns: ['noise', 'shor', 'pollution', 'dhuan', 'smoke', 'factory', 'air quality'], category: 'Pollution Issue', urgency: 'Pollution affects public health and environment', action: 'File complaint with Pollution Control Board' },
-        { patterns: ['hospital', 'clinic', 'doctor', 'medicine', 'health', 'beemar', 'dawai'], category: 'Healthcare Issue', urgency: 'Healthcare access issues affect public well-being', action: 'Contact district health officer or CMO' },
-        { patterns: ['school', 'college', 'teacher', 'education', 'students', 'padhai'], category: 'Education Issue', urgency: 'Education quality issues affect student development', action: 'Contact district education officer' },
-        { patterns: ['footpath', 'pavement', 'divider', 'railing', 'signboard', 'traffic light', 'signal'], category: 'Traffic Infrastructure', urgency: 'Traffic infrastructure damage can cause accidents', action: 'Report to traffic department or municipality' },
-        { patterns: ['mobile network', 'internet', 'signal nahi', 'tower', 'connectivity', 'network problem'], category: 'Connectivity Issue', urgency: 'Poor connectivity affects communication and emergency services', action: 'Contact telecom provider or TRAI for connectivity issues' },
-        { patterns: ['ration', 'food', 'pds', 'anaj', 'ration card', 'distribution'], category: 'Public Distribution Issue', urgency: 'Food distribution issues affect vulnerable populations', action: 'Contact district food supply officer or PDS office' },
+        { patterns: ['street light', 'light nahi', 'lamp band', 'batti nahi', 'andhera', 'roshni nahi', 'light off', 'bulb fused'], category: 'Street Light Issue', urgency: 'Poor lighting poses safety risk at night', action: 'Contact municipality to repair/replace street lights' },
+        { patterns: ['stray dog', 'awara kutta', 'dog bite', 'dog attack', 'awara janwar', 'kutta kata', 'cow on road', 'janwar'], category: 'Stray Animal Menace', urgency: 'Stray animals pose risk of bites and accidents', action: 'Contact municipal animal control department immediately' },
+        { patterns: ['tree fell', 'ped gira', 'tree gira', 'daali toot', 'pedo ko', 'tree blocking road', 'overgrown'], category: 'Tree/Vegetation Issue', urgency: 'Fallen tree can block road and cause accidents', action: 'Contact horticulture department for tree removal' },
+        { patterns: ['footpath toot', 'pavement kharab', 'divider toot', 'railing gir', 'signboard missing', 'traffic signal band'], category: 'Traffic Infrastructure', urgency: 'Damaged traffic infrastructure causes accidents', action: 'Report to Traffic Police and municipal corporation' },
+        { patterns: ['dhuan aa raha', 'smoke nahi', 'pollution ho raha', 'factory se dhuan', 'air quality', 'chemical smell', 'badbu'], category: 'Pollution Issue', urgency: 'Pollution affects public health', action: 'File complaint with State Pollution Control Board' },
+        { patterns: ['transformer blast', 'bijli nahi aa rahi', 'power cut', 'load shedding', 'bijli band', 'no electricity'], category: 'Power Outage', urgency: 'Extended power outage affects essential services', action: 'Contact electricity distribution company helpline (1800-xxx-xxxx)' },
+        { patterns: ['paani kharab', 'dirty water', 'paani mein smell', 'paani peene layak nahi', 'water contaminated'], category: 'Water Quality Issue', urgency: 'Contaminated water is a serious public health risk', action: 'Contact water supply department and get water tested immediately' },
+        { patterns: ['park broken', 'jhula toot', 'bench toot', 'maidan mein', 'playground damaged'], category: 'Public Space Issue', urgency: 'Damaged public space poses safety risk to children', action: 'Report to parks department for immediate maintenance' },
+        { patterns: ['mobile nahi chal', 'internet nahi', 'network nahi', 'tower problem', 'signal nahi'], category: 'Connectivity Issue', urgency: 'Poor connectivity affects communication and emergency services', action: 'Contact telecom provider or file complaint with TRAI' },
+        { patterns: ['hospital band', 'doctor nahi', 'medicine nahi', 'dispensary closed', 'ambulance nahi', 'health center'], category: 'Healthcare Access Issue', urgency: 'Healthcare access issues affect public well-being', action: 'Contact District Medical Officer (CMO) or 108 helpline' },
     ];
     for (const mapping of dynamicMappings) {
         if (mapping.patterns.some(p => lower.includes(p))) {
-            return { category: mapping.category, urgencyReason: mapping.urgency, recommendedAction: mapping.action };
+            return { category: mapping.category, urgencyReason: mapping.urgency, recommendedAction: mapping.action, isValidComplaint: true };
         }
     }
-    // Fallback — extract a noun phrase from the transcript as the category
-    const words = transcript.split(/\s+/).filter(w => w.length > 3);
-    const categoryName = words.slice(0, 3).join(' ').substring(0, 30) || 'Other Issue';
-    return {
-        category: categoryName,
-        urgencyReason: 'Citizen reported an issue requiring attention',
-        recommendedAction: 'Review and forward to appropriate government department',
-    };
+    return { category: 'Other', urgencyReason: 'Citizen reported an issue requiring government attention', recommendedAction: 'Review complaint and forward to the appropriate government department', isValidComplaint: true };
 }
 function runRuleBasedExtraction(transcript, language) {
     const lower = transcript.toLowerCase();
@@ -191,6 +189,7 @@ function runRuleBasedExtraction(transcript, language) {
     let urgencyReason;
     let recommendedAction;
     let finalSeverity;
+    let isInvalidComplaint = false;
     if (bestMatch && bestScore >= 2) {
         category = bestMatch.category;
         urgencyReason = bestMatch.urgencyReason;
@@ -198,14 +197,17 @@ function runRuleBasedExtraction(transcript, language) {
         finalSeverity = detectSeverity(lower, bestMatch.defaultSeverity);
     }
     else {
-        // No standard category matched — dynamically detect
         const dynamic = extractDynamicCategory(transcript);
         category = dynamic.category;
         urgencyReason = dynamic.urgencyReason;
         recommendedAction = dynamic.recommendedAction;
         finalSeverity = detectSeverity(lower, 'Medium');
+        isInvalidComplaint = !dynamic.isValidComplaint;
     }
     const missing = extractMissingInfo(transcript, category, location);
+    if (isInvalidComplaint) {
+        missing.push('Please describe the specific infrastructure problem (road, water, electricity, etc.)');
+    }
     logger_1.logger.info('Rule-based extraction', { category, severity: finalSeverity, score: bestScore, confidence });
     return {
         category: category ?? 'Other',
