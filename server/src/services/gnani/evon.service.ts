@@ -175,6 +175,43 @@ function extractMissingInfo(text: string, category: IncidentCategory, location: 
   return missing;
 }
 
+function detectSeverity(lower: string, defaultSeverity: SeverityLevel): SeverityLevel {
+  // Critical signals
+  if (/(?:jaan ka khatra|life risk|immediate danger|fire|aag|blast|explosion|collapse|gir gaya|bijli se maut|death|मौत|खतरनाक|critical|emergency|urgent|jaldi|turant)/i.test(lower)) {
+    return 'Critical';
+  }
+  // High signals
+  if (/(?:bahut bada|very big|serious|bhari|major|accident|injury|hurt|chot|khoon|blood|bahut zyada|बहुत|काफी|weeks?|hafte|mahine|month)/i.test(lower)) {
+    return 'High';
+  }
+  // Low signals
+  if (/(?:chhota|small|minor|thoda|little|slight|kuch|sometimes|kabhi kabhi|occasionally)/i.test(lower)) {
+    return 'Low';
+  }
+  return defaultSeverity;
+}
+
+function buildDescription(transcript: string, category: IncidentCategory): string {
+  // Try to extract the most relevant sentence from the transcript
+  const sentences = transcript.split(/[।.!?\n]+/).map(s => s.trim()).filter(s => s.length > 10);
+  
+  // Find sentence most relevant to the incident (contains problem keywords)
+  const problemKeywords = ['problem', 'issue', 'broken', 'damaged', 'toot', 'kharab', 'jam', 'leak', 'bah', 'girna', 'खराब', 'टूट', 'समस्या', 'परेशानी'];
+  const bestSentence = sentences.find(s => 
+    problemKeywords.some(kw => s.toLowerCase().includes(kw))
+  ) ?? sentences[0] ?? transcript;
+
+  let description = bestSentence.trim();
+  if (description.length > 250) {
+    const cutAt = description.lastIndexOf(' ', 250);
+    description = description.substring(0, cutAt > 100 ? cutAt : 250) + '...';
+  }
+  if (description.length < 15) {
+    description = `${category} incident reported by user`;
+  }
+  return description;
+}
+
 function runRuleBasedExtraction(transcript: string, language: string): IncidentExtraction {
   const lower = transcript.toLowerCase();
 
@@ -192,29 +229,24 @@ function runRuleBasedExtraction(transcript: string, language: string): IncidentE
     }
   }
 
-  const matched = bestMatch ?? { strongKeywords: [], keywords: [], category: 'Other' as IncidentCategory, defaultSeverity: 'Medium' as SeverityLevel, urgencyReason: 'Incident reported by user', recommendedAction: 'Review and assign to appropriate department' };
+  // If no strong match found (score < 2), default to Other
+  const matched = (bestMatch && bestScore >= 2)
+    ? bestMatch
+    : { strongKeywords: [], keywords: [], category: 'Other' as IncidentCategory, defaultSeverity: 'Medium' as SeverityLevel, urgencyReason: 'Incident does not match standard categories', recommendedAction: 'Review and assign to the appropriate department' };
 
-  // Build a clean description — limit to 200 chars, trim to sentence boundary
-  let description = transcript.trim();
-  if (description.length > 200) {
-    // Try to cut at a natural boundary
-    const cutAt = description.lastIndexOf(' ', 200);
-    description = description.substring(0, cutAt > 100 ? cutAt : 200) + '...';
-  }
-  if (description.length < 15) {
-    description = `${matched.category} incident reported`;
-  }
-
+  const description = buildDescription(transcript, matched.category);
   const location = extractLocationFromText(transcript);
+  const severity = detectSeverity(lower, matched.defaultSeverity);
   const missing = extractMissingInfo(transcript, matched.category, location);
 
-  // Confidence based on keyword match strength
-  const confidence = Math.min(0.5 + bestScore * 0.1, 0.85);
+  // Confidence: strong keyword match = high confidence
+  const confidence = Math.min(0.4 + bestScore * 0.08, 0.88);
 
-  logger.info('Rule-based extraction used (Evon not configured)', {
+  logger.info('Rule-based extraction used', {
     category: matched.category,
-    severity: matched.defaultSeverity,
-    keywordsMatched: bestScore,
+    severity,
+    strongMatches: matched.strongKeywords.filter(kw => lower.includes(kw.toLowerCase())),
+    score: bestScore,
     confidence,
   });
 
@@ -222,7 +254,7 @@ function runRuleBasedExtraction(transcript: string, language: string): IncidentE
     category: matched.category,
     description,
     location,
-    severity: matched.defaultSeverity,
+    severity,
     urgencyReason: matched.urgencyReason,
     recommendedAction: matched.recommendedAction,
     language,
