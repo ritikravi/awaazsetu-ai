@@ -291,8 +291,24 @@ Rules:
             ],
             temperature: constants_1.GNANI_CONFIG.EVON.TEMPERATURE,
             max_tokens: constants_1.GNANI_CONFIG.EVON.MAX_TOKENS,
-        }, { timeout: constants_1.GNANI_CONFIG.EVON.TIMEOUT, headers: { 'Content-Type': 'application/json' } });
-        return response.data?.choices?.[0]?.message?.content ?? response.data?.choices?.[0]?.text ?? '';
+        }, {
+            timeout: constants_1.GNANI_CONFIG.EVON.TIMEOUT,
+            headers: {
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true', // bypass ngrok browser warning page
+            },
+        });
+        const choice = response.data?.choices?.[0];
+        // llama-server with reasoning model returns reasoning_content separately
+        // The actual answer is in message.content
+        const content = choice?.message?.content ?? choice?.text ?? '';
+        const reasoning = choice?.message?.reasoning_content ?? '';
+        // If content has JSON, use it. Otherwise check if reasoning has JSON (some models put it there)
+        if (content.trim())
+            return content;
+        if (reasoning.trim())
+            return reasoning;
+        return '';
     }
     async callHuggingFace(transcript, language) {
         const fullPrompt = `${this.buildSystemPrompt()}\n\n${this.buildUserPrompt(transcript, language)}`;

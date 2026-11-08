@@ -44,9 +44,9 @@ export const GNANI_CONFIG = {
     RETRY_DELAY: 1000,
   },
   EVON: {
-    TIMEOUT: 15000,
-    MAX_TOKENS: 1024,
-    TEMPERATURE: 0.7,
+    TIMEOUT: 60000,    // 60 seconds — llama-server needs time for inference
+    MAX_TOKENS: 800,   // enough for full JSON output after reasoning
+    TEMPERATURE: 0.1,  // low temperature for structured output
     RETRY_ATTEMPTS: 1,
   },
   TIMBRE: {
