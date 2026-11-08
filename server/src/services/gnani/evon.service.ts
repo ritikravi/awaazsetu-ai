@@ -258,57 +258,127 @@ function runRuleBasedExtraction(transcript: string, language: string): IncidentE
 
 class EvonService {
   private readonly endpoint: string | undefined;
+  private readonly endpointType: 'openai' | 'huggingface' | 'none';
 
   constructor() {
     this.endpoint = config.gnani.evon.inferenceEndpoint;
-    if (!this.endpoint) logger.warn('Evon inference endpoint not configured — using rule-based extraction fallback');
+
+    // Detect endpoint type from URL pattern
+    if (!this.endpoint) {
+      this.endpointType = 'none';
+      logger.warn('Evon inference endpoint not configured — using rule-based extraction fallback');
+    } else if (this.endpoint.includes('/v1/chat/completions') || this.endpoint.includes('/v1/completions')) {
+      this.endpointType = 'openai';
+      logger.info('Evon endpoint type: OpenAI-compatible (llama-server / vLLM)');
+    } else {
+      this.endpointType = 'huggingface';
+      logger.info('Evon endpoint type: HuggingFace Inference API');
+    }
   }
 
-  get isConfigured(): boolean { return !!this.endpoint; }
+  get isConfigured(): boolean { return this.endpointType !== 'none'; }
 
-  private buildPrompt(transcript: string, language: string): string {
-    return `You are an AI assistant for AwaazSetu, a platform where India's frontline workers report infrastructure problems. Reports come in Hindi, Hinglish, or English.
+  private buildSystemPrompt(): string {
+    return `You are an AI assistant for AwaazSetu, a civic complaint platform for India's frontline workers. You understand Hindi, Hinglish, and English.
 
-Analyze the following transcript and output ONLY a valid JSON object — no extra text, no markdown fences.
+Your task: analyze the user's complaint transcript and output ONLY a valid JSON object. No extra text, no markdown.
 
-Transcript: "${transcript}"
-Detected Language: ${language}
-
-Output this exact JSON:
+Output schema:
 {
-  "category": "<Water Leakage|Road Damage|Electrical Hazard|Waste Management|Drainage Problem|Public Safety|Infrastructure Damage|Other>",
-  "description": "<clear English summary, 10-500 chars>",
-  "location": { "name": "<location or Not specified>", "verified": false },
+  "category": "<Water Leakage|Road Damage|Electrical Hazard|Waste Management|Drainage Problem|Public Safety|Infrastructure Damage|Street Light Issue|Stray Animal Menace|Power Outage|Water Quality Issue|Traffic Infrastructure|Other>",
+  "description": "<clear English summary of the problem, 20-300 chars>",
+  "location": { "name": "<exact location mentioned, or Not specified>", "verified": false },
   "severity": "<Low|Medium|High|Critical>",
-  "urgencyReason": "<why this severity>",
-  "recommendedAction": "<what should be done>",
-  "language": "${language}",
-  "missingInformation": [],
-  "confidence": 0.85
-}`;
+  "urgencyReason": "<1-2 sentences: why this severity level>",
+  "recommendedAction": "<specific actionable step with department name>",
+  "language": "<detected language code>",
+  "missingInformation": ["<what info is missing for a complete report>"],
+  "confidence": <0.0-1.0>
+}
+
+Rules:
+- NEVER invent a location. If unclear, use "Not specified"
+- Critical only if immediate danger to life
+- confidence reflects how clearly the complaint was described
+- recommendedAction must name the specific government department`;
+  }
+
+  private buildUserPrompt(transcript: string, language: string): string {
+    return `Transcript: "${transcript}"\nDetected language: ${language}\n\nExtract the incident details and output JSON:`;
+  }
+
+  private async callOpenAI(transcript: string, language: string): Promise<string> {
+    const response = await axios.post(
+      this.endpoint!,
+      {
+        model: 'gnani-evon-v3.3',
+        messages: [
+          { role: 'system', content: this.buildSystemPrompt() },
+          { role: 'user', content: this.buildUserPrompt(transcript, language) },
+        ],
+        temperature: GNANI_CONFIG.EVON.TEMPERATURE,
+        max_tokens: GNANI_CONFIG.EVON.MAX_TOKENS,
+      },
+      { timeout: GNANI_CONFIG.EVON.TIMEOUT, headers: { 'Content-Type': 'application/json' } }
+    );
+    return response.data?.choices?.[0]?.message?.content ?? response.data?.choices?.[0]?.text ?? '';
+  }
+
+  private async callHuggingFace(transcript: string, language: string): Promise<string> {
+    const fullPrompt = `${this.buildSystemPrompt()}\n\n${this.buildUserPrompt(transcript, language)}`;
+    const response = await axios.post(
+      this.endpoint!,
+      {
+        inputs: fullPrompt,
+        parameters: {
+          max_new_tokens: GNANI_CONFIG.EVON.MAX_TOKENS,
+          temperature: GNANI_CONFIG.EVON.TEMPERATURE,
+          return_full_text: false,
+        },
+      },
+      { timeout: GNANI_CONFIG.EVON.TIMEOUT, headers: { 'Content-Type': 'application/json' } }
+    );
+    return response.data?.[0]?.generated_text ?? response.data?.generated_text ?? String(response.data ?? '');
   }
 
   async analyzeIncident(transcript: string, language: string): Promise<IncidentExtraction> {
     if (!this.isConfigured || !this.endpoint) {
       return runRuleBasedExtraction(transcript, language);
     }
+
     const startTime = Date.now();
     try {
-      const response = await axios.post(this.endpoint, {
-        inputs: this.buildPrompt(transcript, language),
-        parameters: { max_new_tokens: GNANI_CONFIG.EVON.MAX_TOKENS, temperature: GNANI_CONFIG.EVON.TEMPERATURE, return_full_text: false },
-      }, { timeout: GNANI_CONFIG.EVON.TIMEOUT, headers: { 'Content-Type': 'application/json' } });
+      logger.info('Sending to Evon', { endpointType: this.endpointType, transcriptLength: transcript.length });
 
-      const text: string = response.data?.[0]?.generated_text ?? response.data?.generated_text ?? String(response.data ?? '');
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No valid JSON in Evon response');
+      let rawText: string;
+      if (this.endpointType === 'openai') {
+        rawText = await this.callOpenAI(transcript, language);
+      } else {
+        rawText = await this.callHuggingFace(transcript, language);
+      }
+
+      // Extract JSON from response
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        logger.error('No JSON found in Evon response', { rawText: rawText.substring(0, 200) });
+        throw new Error('No valid JSON in Evon response');
+      }
 
       const validated = IncidentExtractionSchema.parse(JSON.parse(jsonMatch[0]));
-      logger.info('Evon analysis success', { category: validated.category, processingTimeMs: Date.now() - startTime });
+      logger.info('Evon inference success', {
+        category: validated.category,
+        severity: validated.severity,
+        confidence: validated.confidence,
+        processingTimeMs: Date.now() - startTime,
+      });
       return validated;
     } catch (error: any) {
-      logger.error('Evon failed, falling back to rule-based', { error: error.message });
-      if (error instanceof z.ZodError) return runRuleBasedExtraction(transcript, language);
+      logger.error('Evon inference failed', { error: error.message });
+
+      if (error instanceof z.ZodError) {
+        logger.error('Evon output failed schema validation', { errors: error.errors });
+        return runRuleBasedExtraction(transcript, language);
+      }
       if (axios.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED') throw new TimeoutError('Evon inference timed out');
         throw new ServiceUnavailableError(`Evon API error: ${error.response?.status ?? 'unknown'}`);
@@ -317,14 +387,20 @@ Output this exact JSON:
     }
   }
 
-  async healthCheck(): Promise<{ status: string; latencyMs: number }> {
-    if (!this.isConfigured) return { status: 'rule-based', latencyMs: 0 };
+  async healthCheck(): Promise<{ status: string; latencyMs: number; mode: string }> {
+    if (!this.isConfigured) return { status: 'rule-based', latencyMs: 0, mode: 'rule-based-fallback' };
+
     const start = Date.now();
     try {
-      await axios.post(this.endpoint!, { inputs: 'test', parameters: { max_new_tokens: 5 } }, { timeout: 5000 });
-      return { status: 'operational', latencyMs: Date.now() - start };
+      // Lightweight health check
+      const healthUrl = this.endpoint!.replace('/v1/chat/completions', '/health').replace('/v1/completions', '/health');
+      await axios.get(healthUrl, { timeout: 5000 }).catch(() =>
+        // If no health endpoint, try a minimal inference
+        axios.post(this.endpoint!, { inputs: 'hi', parameters: { max_new_tokens: 1 } }, { timeout: 8000 })
+      );
+      return { status: 'operational', latencyMs: Date.now() - start, mode: this.endpointType };
     } catch {
-      return { status: 'unavailable', latencyMs: Date.now() - start };
+      return { status: 'unavailable', latencyMs: Date.now() - start, mode: this.endpointType };
     }
   }
 }

@@ -48,13 +48,18 @@ export declare const IncidentExtractionSchema: z.ZodObject<{
 export type IncidentExtraction = z.infer<typeof IncidentExtractionSchema>;
 declare class EvonService {
     private readonly endpoint;
+    private readonly endpointType;
     constructor();
     get isConfigured(): boolean;
-    private buildPrompt;
+    private buildSystemPrompt;
+    private buildUserPrompt;
+    private callOpenAI;
+    private callHuggingFace;
     analyzeIncident(transcript: string, language: string): Promise<IncidentExtraction>;
     healthCheck(): Promise<{
         status: string;
         latencyMs: number;
+        mode: string;
     }>;
 }
 export declare const evonService: EvonService;

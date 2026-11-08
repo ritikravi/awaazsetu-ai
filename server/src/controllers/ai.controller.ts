@@ -20,16 +20,27 @@ export class AIController {
       const startTime = Date.now();
 
       const result = await evonService.analyzeIncident(transcript, lang);
+      const processingTimeMs = Date.now() - startTime;
+
+      // Tell the client exactly what engine was used — no deception
+      const engineUsed = evonService.isConfigured ? 'evon-v3.3' : 'rule-based';
 
       await AIProcessingLog.create({
         provider: 'evon',
-        modelName: 'gnani-evon-v3.3-30B',
+        modelName: evonService.isConfigured ? 'gnani-evon-v3.3-30B' : 'rule-based-extractor',
         operation: 'incident_analysis',
         status: 'success',
-        processingTimeMs: Date.now() - startTime,
+        processingTimeMs,
       }).catch(() => {});
 
-      sendSuccess(res, result);
+      sendSuccess(res, {
+        ...result,
+        _meta: {
+          engine: engineUsed,
+          processingTimeMs,
+          evonConfigured: evonService.isConfigured,
+        },
+      });
     } catch (error: any) {
       await AIProcessingLog.create({
         provider: 'evon',
@@ -60,6 +71,7 @@ export class AIController {
         prisma: toResult(prisma),
         evon: toResult(evon),
         timbre: toResult(timbre),
+        evonMode: evonService.isConfigured ? 'live-inference' : 'rule-based-fallback',
       });
     } catch (error) {
       next(error);

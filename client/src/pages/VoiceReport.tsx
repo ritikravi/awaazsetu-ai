@@ -31,6 +31,7 @@ export default function VoiceReport() {
   const [correctedTranscript, setCorrectedTranscript] = useState('');
   const [analysis, setAnalysis] = useState<IncidentExtraction | null>(null);
   const [editedAnalysis, setEditedAnalysis] = useState<IncidentExtraction | null>(null);
+  const [analysisEngine, setAnalysisEngine] = useState<'evon-v3.3' | 'rule-based' | null>(null);
 
   // Auto-fetch GPS immediately when component mounts AND when analysis step loads
   useEffect(() => {
@@ -103,9 +104,10 @@ export default function VoiceReport() {
     if (!t.trim()) return;
     try {
       const res = await api.post('/ai/analyze', { transcript: t, language: lang });
-      const result = res.data.data as IncidentExtraction;
+      const result = res.data.data as IncidentExtraction & { _meta?: { engine: string; evonConfigured: boolean } };
       setAnalysis(result);
       setEditedAnalysis({ ...result });
+      setAnalysisEngine(result._meta?.engine === 'evon-v3.3' ? 'evon-v3.3' : 'rule-based');
       // Don't advance step — user can still edit transcript
     } catch {
       // Silent — user can still manually trigger analysis
@@ -408,7 +410,10 @@ export default function VoiceReport() {
         {step === 'analysis' && analysis && editedAnalysis && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-green-400 text-sm">
-              <CheckCircle size={16} /> Evon v3.3 analysis complete
+              <CheckCircle size={16} />
+              {analysisEngine === 'evon-v3.3'
+                ? 'Evon v3.3 analysis complete'
+                : 'Keyword extraction complete (Evon not connected)'}
               {analysis.confidence !== undefined && (
                 <span className="ml-auto text-gray-500 text-xs">
                   Confidence: {(analysis.confidence * 100).toFixed(0)}%
