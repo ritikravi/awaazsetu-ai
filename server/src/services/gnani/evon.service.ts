@@ -397,6 +397,11 @@ Rules:
       }
       if (axios.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED') throw new TimeoutError('Evon inference timed out');
+        // 404 means endpoint is misconfigured or ngrok tunnel expired — fall back gracefully
+        if (error.response?.status === 404 || error.response?.status === 502 || error.response?.status === 503) {
+          logger.warn('Evon endpoint unreachable, falling back to rule-based', { status: error.response?.status });
+          return runRuleBasedExtraction(transcript, language);
+        }
         throw new ServiceUnavailableError(`Evon API error: ${error.response?.status ?? 'unknown'}`);
       }
       throw new ServiceUnavailableError(`Incident analysis failed: ${error.message}`);
